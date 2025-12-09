@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gradient To-Do</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="background-gradient"></div>
+
+    <div class="app-container">
+        <header>
+            <h1>Мои Задачи</h1>
+            <div class="input-group">
+                <input type="text" id="taskInput" placeholder="Что нужно сделать?">
+                <select id="recurrenceSelect">
+                    <option value="none">Не повторять</option>
+                    <option value="daily">Каждый день</option>
+                    <option value="workdays">По рабочим дням</option>
+                    <option value="weekly">Раз в неделю</option>
+                    <option value="monthly">Раз в месяц</option>
+                    <option value="yearly">Раз в год</option>
+                </select>
+                <button id="addTaskBtn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <main class="board">
+            <div class="column" id="missed">
+                <div class="column-header">
+                    <h2>Пропущенное</h2>
+                    <span class="count">0</span>
+                </div>
+                <div class="task-list" data-category="missed">
+                    <!-- Tasks will be injected here -->
+                </div>
+            </div>
+
+            <div class="column" id="today">
+                <div class="column-header">
+                    <h2>Сегодня</h2>
+                    <span class="count">0</span>
+                </div>
+                <div class="task-list" data-category="today"></div>
+            </div>
+
+            <div class="column" id="tomorrow">
+                <div class="column-header">
+                    <h2>Завтра</h2>
+                    <span class="count">0</span>
+                </div>
+                <div class="task-list" data-category="tomorrow"></div>
+            </div>
+
+            <div class="column" id="later">
+                <div class="column-header">
+                    <h2>Позже</h2>
+                    <span class="count">0</span>
+                </div>
+                <div class="task-list" data-category="later"></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
