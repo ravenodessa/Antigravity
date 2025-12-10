@@ -26,6 +26,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter') addTask();
     });
 
+    // Clear Completed Button
+    const clearCompletedBtn = document.getElementById('clearCompletedBtn');
+    if (clearCompletedBtn) {
+        clearCompletedBtn.addEventListener('click', () => {
+            if (confirm('Вы уверены, что хотите удалить все выполненные задачи?')) {
+                tasks = tasks.filter(t => !t.completed);
+                saveTasks();
+                renderTasks();
+            }
+        });
+    }
+
     // Drag and Drop Logic
     let draggedItem = null;
 
@@ -124,9 +136,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         tasks.forEach(task => {
             const card = createTaskElement(task);
-            const column = document.querySelector(`.task-list[data-category="${task.category}"]`);
-            if (column) {
-                column.appendChild(card);
+            if (task.completed) {
+                const completedColumn = document.querySelector('.task-list[data-category="completed"]');
+                if (completedColumn) completedColumn.appendChild(card);
+            } else {
+                const column = document.querySelector(`.task-list[data-category="${task.category}"]`);
+                if (column) {
+                    column.appendChild(card);
+                }
             }
         });
 
@@ -216,6 +233,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const taskIndex = tasks.findIndex(t => t.id === id);
         if (taskIndex > -1) {
             const task = tasks[taskIndex];
+
+            // Handle drop to 'completed'
+            if (newCategory === 'completed') {
+                if (!task.completed) {
+                    toggleTaskCompletion(id, true);
+                }
+                return;
+            }
+
+            // Handle drop from 'completed' or between other categories
+            if (task.completed) {
+                task.completed = false;
+            }
+
             task.category = newCategory;
 
             // Update dueDate based on category drop
@@ -328,11 +359,14 @@ document.addEventListener('DOMContentLoaded', () => {
             missed: 0,
             today: 0,
             tomorrow: 0,
-            later: 0
+            later: 0,
+            completed: 0
         };
 
         tasks.forEach(task => {
-            if (counts[task.category] !== undefined) {
+            if (task.completed) {
+                counts.completed++;
+            } else if (counts[task.category] !== undefined) {
                 counts[task.category]++;
             }
         });

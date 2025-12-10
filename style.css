@@ -250,6 +250,25 @@ header h1 {
     color: #ff4d4d;
 }
 
+.delete-all-btn {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 6px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.delete-all-btn:hover {
+    background: rgba(255, 0, 0, 0.2);
+    color: #ff4d4d;
+    transform: scale(1.1);
+}
+
 /* Checkbox Styles */
 .checkbox-wrapper {
     position: relative;
