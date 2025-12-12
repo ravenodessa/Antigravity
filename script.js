@@ -1,24 +1,22 @@
+// Local Storage & JSON File Logic
+// No Firebase imports anymore
+
 document.addEventListener('DOMContentLoaded', () => {
     const taskInput = document.getElementById('taskInput');
-    const recurrenceSelect = document.getElementById('recurrenceSelect'); // New
+    const recurrenceSelect = document.getElementById('recurrenceSelect');
     const addTaskBtn = document.getElementById('addTaskBtn');
     const columns = document.querySelectorAll('.task-list');
 
-    // Load tasks from LocalStorage
-    let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+    // New buttons
+    const saveBtn = document.getElementById('saveBtn');
+    const loadBtn = document.getElementById('loadBtn');
+    const fileInput = document.getElementById('fileInput');
 
-    // Check for date change and move tasks based on dueDate
-    const lastVisitDate = localStorage.getItem('lastVisitDate');
-    const todayDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    let tasks = [];
 
-    if (lastVisitDate && lastVisitDate !== todayDate) {
-        migrateTasksForNewDay(todayDate);
-        saveTasks();
-    }
-    localStorage.setItem('lastVisitDate', todayDate);
+    // --- Initialization ---
 
-    // Initial Render
-    renderTasks();
+    loadTasksFromLocalStorage();
 
     // Event Listeners
     addTaskBtn.addEventListener('click', addTask);
@@ -26,77 +24,52 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter') addTask();
     });
 
-    // Clear Completed Button
     const clearCompletedBtn = document.getElementById('clearCompletedBtn');
     if (clearCompletedBtn) {
         clearCompletedBtn.addEventListener('click', () => {
             if (confirm('Вы уверены, что хотите удалить все выполненные задачи?')) {
                 tasks = tasks.filter(t => !t.completed);
-                saveTasks();
+                saveTasksToLocalStorage();
                 renderTasks();
             }
         });
     }
 
-    // Drag and Drop Logic
-    let draggedItem = null;
+    // JSON Save/Load Listeners
+    saveBtn.addEventListener('click', saveTasksToJSON);
+    loadBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', loadTasksFromJSON);
 
+    // Drag and Drop Logic
     columns.forEach(column => {
         column.addEventListener('dragover', (e) => {
             e.preventDefault();
             const afterElement = getDragAfterElement(column, e.clientY);
             const draggable = document.querySelector('.dragging');
-            if (afterElement == null) {
-                column.appendChild(draggable);
-            } else {
-                column.insertBefore(draggable, afterElement);
+            if (draggable) {
+                if (afterElement == null) {
+                    column.appendChild(draggable);
+                } else {
+                    column.insertBefore(draggable, afterElement);
+                }
             }
         });
 
         column.addEventListener('drop', (e) => {
             e.preventDefault();
-            const newCategory = column.dataset.category;
-            if (draggedItem) {
-                const id = draggedItem.dataset.id;
+            const draggable = document.querySelector('.dragging');
+            if (draggable) {
+                const id = draggable.dataset.id;
+                const newCategory = column.dataset.category;
                 updateTaskCategory(id, newCategory);
             }
         });
     });
 
-    function migrateTasksForNewDay(today) {
-        tasks = tasks.map(task => {
-            // Logic:
-            // 1. If category is 'today' and it's a new day -> move to 'missed'
-            // 2. If task has a dueDate:
-            //    - if dueDate < today (overdue) -> 'missed' (unless already done)
-            //    - if dueDate === today -> 'today'
-            //    - if dueDate > today -> 'later' or 'tomorrow' accordingly
+    // --- Core Functions ---
 
-            if (task.completed) return task;
-
-            const taskDate = task.dueDate ? task.dueDate : null;
-
-            // Legacy support or manual move fallback
-            if (task.category === 'today' && (!taskDate || taskDate < today)) {
-                return { ...task, category: 'missed' };
-            }
-
-            // Promotion logic based on date
-            if (taskDate) {
-                if (taskDate < today) return { ...task, category: 'missed' };
-                if (taskDate === today) return { ...task, category: 'today' };
-
-                // Optional: Check if tomorrow
-                const tomorrow = new Date();
-                tomorrow.setDate(new Date().getDate() + 1);
-                const tomorrowStr = tomorrow.toISOString().split('T')[0];
-
-                if (taskDate === tomorrowStr) return { ...task, category: 'tomorrow' };
-                // Keep as later if date is further out
-            }
-
-            return task;
-        });
+    function generateId() {
+        return Date.now().toString(36) + Math.random().toString(36).substr(2);
     }
 
     function addTask() {
@@ -106,30 +79,204 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (text) {
             const newTask = {
-                id: Date.now().toString(),
+                id: generateId(),
                 text: text,
-                category: 'today', // Default to today
+                category: 'today',
                 completed: false,
                 createdAt: new Date().toISOString(),
                 recurrence: recurrence,
-                dueDate: today // Set initial due date to today
+                dueDate: today
             };
+
             tasks.push(newTask);
-            saveTasks();
+            saveTasksToLocalStorage();
             renderTasks();
+
             taskInput.value = '';
-            recurrenceSelect.value = 'none'; // Reset select
+            recurrenceSelect.value = 'none';
         }
     }
 
-    function renderTasks() {
-        // Clear all columns
-        columns.forEach(col => col.innerHTML = '');
+    function deleteTask(id) {
+        tasks = tasks.filter(t => t.id !== id);
+        saveTasksToLocalStorage();
+        renderTasks();
+    }
 
-        // Reset counts
+    function updateTaskCategory(id, newCategory) {
+        const task = tasks.find(t => t.id === id);
+        if (!task) return;
+
+        // Same logic as before
+        if (newCategory === 'completed') {
+            if (!task.completed) {
+                toggleTaskCompletion(id, true);
+            }
+            return;
+        }
+
+        task.completed = false;
+        task.category = newCategory;
+
+        const today = new Date();
+        if (newCategory === 'today') {
+            task.dueDate = today.toISOString().split('T')[0];
+        } else if (newCategory === 'tomorrow') {
+            const tmr = new Date(today);
+            tmr.setDate(tmr.getDate() + 1);
+            task.dueDate = tmr.toISOString().split('T')[0];
+        } else if (newCategory === 'later') {
+            // Keep existing due date if plausible, else clear it or set future? 
+            // Original logic:
+            if (task.dueDate && task.dueDate <= today.toISOString().split('T')[0]) {
+                task.dueDate = null; // Reset due date if it was in past/present
+            }
+        }
+
+        saveTasksToLocalStorage(); // Persist
+        renderTasks();
+    }
+
+    function toggleTaskCompletion(id, isCompleted) {
+        const task = tasks.find(t => t.id === id);
+        if (!task) return;
+
+        task.completed = isCompleted;
+        if (isCompleted) {
+            // task.category = 'completed'; // Visual only, usually we keep category prop? 
+            // Actually original code didn't force category change on data level strictly, 
+            // but UI put it in completed col.
+
+            // Handle Recurrence
+            if (task.recurrence && task.recurrence !== 'none') {
+                const nextDate = calculateNextDate(task.dueDate || new Date().toISOString().split('T')[0], task.recurrence);
+                const nextCategory = getCategoryForDate(nextDate);
+
+                const nextTask = {
+                    id: generateId(),
+                    text: task.text,
+                    category: nextCategory,
+                    completed: false,
+                    createdAt: new Date().toISOString(),
+                    recurrence: task.recurrence,
+                    dueDate: nextDate
+                };
+                tasks.push(nextTask);
+            }
+        }
+
+        saveTasksToLocalStorage();
+        renderTasks();
+    }
+
+    // --- Persistence & Migration ---
+
+    function saveTasksToLocalStorage() {
+        localStorage.setItem('localTasks', JSON.stringify(tasks));
+        localStorage.setItem('lastVisitDate', new Date().toISOString().split('T')[0]);
+    }
+
+    function loadTasksFromLocalStorage() {
+        const stored = localStorage.getItem('localTasks');
+        if (stored) {
+            try {
+                tasks = JSON.parse(stored);
+            } catch (e) {
+                console.error("Failed to parse local tasks", e);
+                tasks = [];
+            }
+        }
+
+        // Check for day migration
+        const lastVisitDate = localStorage.getItem('lastVisitDate');
+        const todayDate = new Date().toISOString().split('T')[0];
+        if (lastVisitDate && lastVisitDate !== todayDate) {
+            migrateTasksForNewDay(todayDate);
+        }
+
+        renderTasks();
+    }
+
+    function migrateTasksForNewDay(today) {
+        let hasUpdates = false;
+        tasks.forEach(task => {
+            if (task.completed) return;
+
+            const taskDate = task.dueDate || null;
+            let newCategory = null;
+
+            if (task.category === 'today' && (!taskDate || taskDate < today)) {
+                newCategory = 'missed';
+            } else if (taskDate) {
+                if (taskDate < today && task.category !== 'missed') newCategory = 'missed';
+                if (taskDate === today && task.category !== 'today') newCategory = 'today';
+                const tmr = new Date(); tmr.setDate(tmr.getDate() + 1);
+                const tmrStr = tmr.toISOString().split('T')[0];
+                if (taskDate === tmrStr && task.category !== 'tomorrow') newCategory = 'tomorrow';
+            }
+
+            if (newCategory) {
+                task.category = newCategory;
+                hasUpdates = true;
+            }
+        });
+
+        if (hasUpdates) {
+            console.log("Tasks migrated for new day");
+            saveTasksToLocalStorage();
+        }
+    }
+
+    // --- JSON File Operations ---
+
+    function saveTasksToJSON() {
+        const dataStr = JSON.stringify(tasks, null, 2);
+        const blob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tasks_backup_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    function loadTasksFromJSON(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            try {
+                const importedTasks = JSON.parse(e.target.result);
+                if (Array.isArray(importedTasks)) {
+                    if (confirm(`Загрузить ${importedTasks.length} задач? Текущие задачи будут заменены.`)) {
+                        tasks = importedTasks;
+                        saveTasksToLocalStorage();
+                        renderTasks();
+                        alert("Задачи успешно загружены!");
+                    }
+                } else {
+                    alert("Ошибка: Неверный формат файла.");
+                }
+            } catch (error) {
+                console.error("Error parsing JSON:", error);
+                alert("Ошибка при чтении файла.");
+            }
+            fileInput.value = ''; // Reset input
+        };
+        reader.readAsText(file);
+    }
+
+    // --- UI/Helper Functions ---
+
+    function renderTasks() {
+        columns.forEach(col => col.innerHTML = '');
         document.querySelectorAll('.count').forEach(c => c.textContent = '0');
 
-        tasks.sort((a, b) => { // Sort by date if available, then creation
+        tasks.sort((a, b) => {
             if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
             return 0;
         });
@@ -141,9 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (completedColumn) completedColumn.appendChild(card);
             } else {
                 const column = document.querySelector(`.task-list[data-category="${task.category}"]`);
-                if (column) {
-                    column.appendChild(card);
-                }
+                if (column) column.appendChild(card);
             }
         });
 
@@ -161,7 +306,6 @@ document.addEventListener('DOMContentLoaded', () => {
             recurrenceBadge = `<span class="recurrence-badge">🔄 ${getRecurrenceLabel(task.recurrence)}</span>`;
         }
 
-        // Debug date display (optional, can be removed)
         let dateDisplay = '';
         if (task.category === 'later' && task.dueDate) {
             dateDisplay = `<span class="date-badge">📅 ${task.dueDate}</span>`;
@@ -179,14 +323,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     ${dateDisplay}
                 </div>
             </div>
-            <button class="delete-btn" onclick="deleteTask('${task.id}')">
+            <button class="delete-btn">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M18 6L6 18M6 6l12 12"/>
                 </svg>
             </button>
         `;
 
-        // Checkbox listener
         const checkbox = div.querySelector('.task-checkbox');
         checkbox.addEventListener('change', (e) => {
             toggleTaskCompletion(task.id, e.target.checked);
@@ -194,22 +337,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
         div.addEventListener('dragstart', (e) => {
             div.classList.add('dragging');
-            draggedItem = div;
-            e.dataTransfer.effectAllowed = 'move';
         });
 
         div.addEventListener('dragend', () => {
             div.classList.remove('dragging');
-            draggedItem = null;
         });
 
-        // Delete button listener
         div.querySelector('.delete-btn').addEventListener('click', (e) => {
-            e.stopPropagation(); // Prevent drag start
+            e.stopPropagation();
             deleteTask(task.id);
         });
 
         return div;
+    }
+
+    function updateCounts() {
+        const counts = { missed: 0, today: 0, tomorrow: 0, later: 0, completed: 0 };
+        tasks.forEach(task => {
+            if (task.completed) counts.completed++;
+            else if (counts[task.category] !== undefined) counts[task.category]++;
+        });
+        Object.keys(counts).forEach(key => {
+            const column = document.getElementById(key);
+            if (column) column.querySelector('.count').textContent = counts[key];
+        });
     }
 
     function getRecurrenceLabel(type) {
@@ -223,173 +374,37 @@ document.addEventListener('DOMContentLoaded', () => {
         return map[type] || type;
     }
 
-    window.deleteTask = function (id) {
-        tasks = tasks.filter(t => t.id !== id);
-        saveTasks();
-        renderTasks();
-    };
-
-    function updateTaskCategory(id, newCategory) {
-        const taskIndex = tasks.findIndex(t => t.id === id);
-        if (taskIndex > -1) {
-            const task = tasks[taskIndex];
-
-            // Handle drop to 'completed'
-            if (newCategory === 'completed') {
-                if (!task.completed) {
-                    toggleTaskCompletion(id, true);
-                }
-                return;
-            }
-
-            // Handle drop from 'completed' or between other categories
-            if (task.completed) {
-                task.completed = false;
-            }
-
-            task.category = newCategory;
-
-            // Update dueDate based on category drop
-            const today = new Date();
-            if (newCategory === 'today') {
-                task.dueDate = today.toISOString().split('T')[0];
-            } else if (newCategory === 'tomorrow') {
-                const tmr = new Date(today);
-                tmr.setDate(tmr.getDate() + 1);
-                task.dueDate = tmr.toISOString().split('T')[0];
-            } else if (newCategory === 'later') {
-                // If moving to later, we keep the existing date if it's future, 
-                // or maybe clear it? For now let's keep it but it might cause it to jump back if date is today.
-                // Better approach: If date is <= today, set it to "no specific date" or next week?
-                // Let's just leave it alone for manual drops for now, user desires visual organization primarily.
-                // BUT, our migration logic relies on date. So if I drop 'today' task to 'later', 
-                // on refresh it will jump back to 'today' if I don't change date.
-                // Let's set date to null/undefined if dropped in later? Or +7 days?
-                // Decision: clear date if dropped to 'later' or 'missed' so it doesn't auto-migrate back immediately.
-                if (task.dueDate && task.dueDate <= today.toISOString().split('T')[0]) {
-                    task.dueDate = null;
-                }
-            } else if (newCategory === 'missed') {
-                // Typically means past.
-            }
-
-            saveTasks();
-            renderTasks();
-            updateCounts();
-        }
-    }
-
-    function toggleTaskCompletion(id, isCompleted) {
-        const taskIndex = tasks.findIndex(t => t.id === id);
-        if (taskIndex > -1) {
-            const task = tasks[taskIndex];
-            task.completed = isCompleted;
-
-            // Handle Recurrence
-            if (isCompleted && task.recurrence && task.recurrence !== 'none') {
-                const nextDate = calculateNextDate(task.dueDate || new Date().toISOString().split('T')[0], task.recurrence);
-
-                // Create next task instance
-                const nextTask = {
-                    ...task,
-                    id: Date.now().toString(), // New ID
-                    completed: false,
-                    dueDate: nextDate,
-                    category: getCategoryForDate(nextDate)
-                };
-
-                // Add next task
-                tasks.push(nextTask);
-
-                // Optional: Strip recurrence from the completed task so it doesn't spawn again if toggled? 
-                // Usually completed instance is history. Let's keep it simple.
-                // If I uncheck the completed task, I probably don't want to delete the new one automatically (too complex).
-            }
-
-            saveTasks();
-            renderTasks();
-        }
-    }
-
     function calculateNextDate(baseDateStr, recurrence) {
         const date = new Date(baseDateStr);
-
         switch (recurrence) {
-            case 'daily':
-                date.setDate(date.getDate() + 1);
-                break;
+            case 'daily': date.setDate(date.getDate() + 1); break;
             case 'workdays':
-                // Add 1 day, then if Sat/Sun move to Mon
-                do {
-                    date.setDate(date.getDate() + 1);
-                } while (date.getDay() === 0 || date.getDay() === 6);
+                do { date.setDate(date.getDate() + 1); } while (date.getDay() === 0 || date.getDay() === 6);
                 break;
-            case 'weekly':
-                date.setDate(date.getDate() + 7);
-                break;
-            case 'monthly':
-                date.setMonth(date.getMonth() + 1);
-                break;
-            case 'yearly':
-                date.setFullYear(date.getFullYear() + 1);
-                break;
+            case 'weekly': date.setDate(date.getDate() + 7); break;
+            case 'monthly': date.setMonth(date.getMonth() + 1); break;
+            case 'yearly': date.setFullYear(date.getFullYear() + 1); break;
         }
         return date.toISOString().split('T')[0];
     }
 
     function getCategoryForDate(dateStr) {
         const today = new Date().toISOString().split('T')[0];
-
-        const tmr = new Date();
-        tmr.setDate(tmr.getDate() + 1);
+        const tmr = new Date(); tmr.setDate(tmr.getDate() + 1);
         const tomorrow = tmr.toISOString().split('T')[0];
-
         if (dateStr === today) return 'today';
         if (dateStr === tomorrow) return 'tomorrow';
         if (dateStr < today) return 'missed';
         return 'later';
     }
 
-    function saveTasks() {
-        localStorage.setItem('tasks', JSON.stringify(tasks));
-    }
-
-    function updateCounts() {
-        const counts = {
-            missed: 0,
-            today: 0,
-            tomorrow: 0,
-            later: 0,
-            completed: 0
-        };
-
-        tasks.forEach(task => {
-            if (task.completed) {
-                counts.completed++;
-            } else if (counts[task.category] !== undefined) {
-                counts[task.category]++;
-            }
-        });
-
-        Object.keys(counts).forEach(key => {
-            const column = document.getElementById(key);
-            if (column) {
-                column.querySelector('.count').textContent = counts[key];
-            }
-        });
-    }
-
     function getDragAfterElement(container, y) {
         const draggableElements = [...container.querySelectorAll('.task-card:not(.dragging)')];
-
         return draggableElements.reduce((closest, child) => {
             const box = child.getBoundingClientRect();
             const offset = y - box.top - box.height / 2;
-            if (offset < 0 && offset > closest.offset) {
-                return { offset: offset, element: child };
-            } else {
-                return closest;
-            }
+            if (offset < 0 && offset > closest.offset) return { offset: offset, element: child };
+            else return closest;
         }, { offset: Number.NEGATIVE_INFINITY }).element;
     }
 });
