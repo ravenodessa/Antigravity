@@ -205,6 +205,11 @@ header h1 {
     transform: translateY(-5px);
 }
 
+#today {
+    border: 2px solid #ff4d4d;
+    box-shadow: 0 0 20px rgba(255, 77, 77, 0.3);
+}
+
 .column-header {
     display: flex;
     justify-content: space-between;
