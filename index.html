@@ -49,6 +49,14 @@
         </header>
 
         <main class="board">
+            <div class="column" id="today">
+                <div class="column-header">
+                    <h2>Сегодня</h2>
+                    <span class="count">0</span>
+                </div>
+                <div class="task-list" data-category="today"></div>
+            </div>
+
             <div class="column" id="missed">
                 <div class="column-header">
                     <h2>Пропущенное</h2>
@@ -57,14 +65,6 @@
                 <div class="task-list" data-category="missed">
                     <!-- Tasks will be injected here -->
                 </div>
-            </div>
-
-            <div class="column" id="today">
-                <div class="column-header">
-                    <h2>Сегодня</h2>
-                    <span class="count">0</span>
-                </div>
-                <div class="task-list" data-category="today"></div>
             </div>
 
             <div class="column" id="tomorrow">
