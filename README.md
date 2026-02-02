@@ -1,2 +1,2 @@
 # Antigravity
-Todo lisr
+Todo list
